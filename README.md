@@ -1,82 +1,60 @@
-# inve - Laboratory Inventory System 🧪
+# LabLogix - Material Monitoring & Testing System 🧪
 
-A modern, fullstack Laboratory Inventory & Reagent Management System built with **Next.js 15 (App Router)**, **TypeScript**, **Zod**, **PostgreSQL**, and **RustFS S3**.
+A specialized laboratory material monitoring and logistics tracking system built with **Next.js 15 (App Router)**, **TypeScript**, **Zod**, **PostgreSQL**, and **RustFS S3**.
 
 Deployed and orchestrated on **Dokploy** under domain [vector-intertek.web.id](https://vector-intertek.web.id).
 
 ---
 
-## 🌟 Key Features
+## 🌟 Fitur Utama & Aturan Bisnis
 
-1. **Laboratory Inventory Catalog**:
-   - Reagents, chemicals, glassware, culture media, consumables, and lab equipment.
-   - CAS registry number tracking, lot/batch numbers, and expiration dates.
-   - Hazard classification badges (Flammable, Corrosive, Toxic, Biohazard, Oxidizing).
-   - Storage locations (Acid Cabinet, Flammable Storage, Cold Room, Shelf, etc.).
-   - Low-stock and expiration threshold warnings with real-time status indicators.
+### 1. Skema Data 19 Kolom & Filter Header Otomatis
+Mendukung 19 atribut standar:
+`no`, `status`, `deliveryDate`, `pointOfOrigin`, `pointOfDelivery`, `shippingRequirements`, `shipmentBy`, `itemDescription`, `pic`, `technicalProposalStatus`, `costProposalStatus`, `statusCoff`, `noCoff`, `analysisRequested`, `finalStatusReport`, `remarkRaw`, `remarkStructured`, `remarkParseNote`, dan `fileUrl` (Kolom S - LINK FILE).
+Filter otomatis melewati baris header jika `no.toLowerCase() === 'no'` atau `status.toLowerCase() === 'status'` atau `itemDescription` mengandung `'item description'`.
 
-2. **Stock Movements & Audit Trail**:
-   - Stock OUT (Usage in experiments, QC sample testing, dilution).
-   - Stock IN (Purchase delivery, buffer stock replenishment).
-   - Stock ADJUSTMENT (Periodic physical stock audit).
-   - Atomic database transactions with row-level locks preventing negative balances.
-   - Complete historical audit log showing analyst name, experiment purpose, and stock change.
+### 2. Gerbang Login & Penguncian PIC Otomatis (Locked PIC)
+- Pengguna wajib login sebelum mengakses dashboard monitoring.
+- Field `PIC` pada Modal Tambah Material dan Modal Update Material otomatis terisi dari akun login dan dikunci (`disabled` & `readOnly`) dengan ikon gembok serta badge `"Akun Login"`.
 
-3. **RustFS S3 Document Storage**:
-   - Direct integration with high-performance RustFS S3 object storage.
-   - Upload Safety Data Sheets (MSDS), Certificates of Analysis (CoA), and equipment manuals.
+### 3. Standarisasi 4 Status & 5 Kartu KPI Interaktif
+- 4 Status Resmi:
+  1. **On The Way** (Badge Sky / Biru Muda + Ikon Truk)
+  2. **Analysis** (Badge Amber / Kuning + Indikator Titik Berkedip)
+  3. **Canceled** (Badge Rose / Merah + Ikon Peringatan)
+  4. **Done** (Badge Emerald / Hijau + Ikon Centang)
+- 5 Kartu KPI di atas dashboard (Total Material, On The Way, Analysis, Canceled, Done) yang dapat diklik untuk memfilter tabel secara instan.
 
-4. **Direct PostgreSQL Connection & Adminer**:
-   - PostgreSQL 16 Alpine containerized on Dokploy.
-   - Integrated Adminer web GUI for direct database inspection and management.
+### 4. Visualisasi 6 Checkpoint Rute Logistik
+- Dropdown standar lokasi origin & delivery:
+  `['FPU', 'ORF', 'PSTB', 'Somber / Altus', 'Intertek Balikpapan', 'Intertek Jakarta', 'Handayani']` + opsi kustom.
+- Trek 6 Checkpoint di Tab 2:
+  `FPU ➔ ORF ➔ PSTB ➔ Somber / Altus ➔ Intertek Balikpapan ➔ Intertek Jakarta`
+  dengan indikator animasi `"MOBIL DI SINI"` di atas checkpoint aktif yang otomatis berpindah mengikuti Point of Origin dan dapat diklik langsung.
 
-5. **Zod Schema Validation**:
-   - Strict runtime validation on all item creation, updates, and stock transaction payloads.
+### 5. Modal Update Material 5 Tab Terstruktur
+- **Tab 1 (Status & Sampel)**: Nomor urut otomatis (disabled), dropdown 4 status, tombol Ubah Cepat Status, tanggal pengiriman, deskripsi sampel, PIC terkunci, dan analisis yang diminta.
+- **Tab 2 (Rute & Pengiriman)**: Lokasi origin & delivery, kebutuhan pengiriman, ekspedisi (Shipment By), visualisasi 6 Checkpoint mobil.
+- **Tab 3 (Proposal, COFF & Laporan)**: Technical Proposal Status, Cost Proposal Status, Status COFF, No. COFF, dan Final Status Report.
+- **Tab 4 (Log Aktivitas)**: Form tambah catatan baru (Date Picker, PIC otomatis, input teks aktivitas, tombol "Tambah ke Log" disimpan ke `remarkRaw` dipisahkan `"<br> "`), serta daftar timeline riwayat log dengan tombol Hapus (ikon tempat sampah merah) per baris log.
+- **Tab 5 (Lampiran File)**: Area upload dokumen/foto untuk mengisi `fileUrl` (Kolom S: LINK FILE), tombol Preview dan Hapus File.
 
----
+### 6. Fitur Upload & Preview File "Versi Paksa" (100% Anti-Gagal)
+- Di Tabel Monitoring Utama (Kolom S - LINK FILE):
+  * Jika belum ada file: tombol `+ Upload` langsung di baris tabel.
+  * Jika sudah ada file: tombol `Preview` (tab baru) dan tombol ganti file.
+- Di Backend Upload: mencoba upload ke RustFS S3; jika terjadi kendala izin/koneksi/CORS, otomatis mengaktifkan "Versi Paksa" (Robust Fallback) dengan menyimpan Base64 Data URL sehingga upload 100% anti-gagal dan dapat langsung di-preview.
 
-## 🛠️ Tech Stack & Infrastructure
-
-- **Framework**: Next.js 15 (App Router, Standalone build) + React 19
-- **Validation**: Zod 3
-- **Database**: PostgreSQL 16 (Running on Dokploy)
-- **Object Storage**: RustFS S3 Object Storage
-- **Database GUI**: Adminer (Dokploy)
-- **Deployment & PaaS**: Dokploy via Docker Swarm & Traefik Reverse Proxy
-- **DNS & CDN**: Cloudflare (`vector-intertek.web.id`)
-
----
-
-## 🔐 Environment Variables
-
-```env
-# Database Connection (Direct to Dokploy PostgreSQL)
-DATABASE_URL=postgresql://inve_user:InveLab2026SecurePass@149.41.198.83:5432/inve_db
-
-# RustFS S3 Object Storage
-S3_ENDPOINT=http://149.41.198.83:9000
-S3_ACCESS_KEY=inve_rustfs_admin
-S3_SECRET_KEY=InveRustfs2026SecureKey
-S3_BUCKET=inve-storage
-S3_REGION=us-east-1
-
-# External Tools & App URLs
-ADMINER_URL=http://149.41.198.83:8080
-NEXT_PUBLIC_APP_URL=https://vector-intertek.web.id
-```
+### 7. Koneksi Database Otomatis & Halaman Admin Terproteksi
+- Koneksi default ke database Dokploy PostgreSQL (`inve_db`).
+- Halaman Koneksi & Database diproteksi password administrator (`intertekqc`) untuk cek status sinkronisasi, salin connection string, dan reset database ke sampel standar LabLogix.
 
 ---
 
-## 🚀 Running Locally
+## 🛠️ Infrastruktur & Kredensial
 
-```bash
-# Install dependencies
-pnpm install
-
-# Run development server
-pnpm dev
-
-# Build for production
-pnpm build
-pnpm start
-```
+- **Aplikasi Web:** [https://vector-intertek.web.id](https://vector-intertek.web.id)
+- **Adminer DB GUI:** [http://149.41.198.83:8080](http://149.41.198.83:8080)
+- **RustFS S3:** `http://149.41.198.83:9000` (Console: `http://149.41.198.83:9001`)
+- **Dokploy:** `http://149.41.198.83:3000`
+- **Admin Password:** `intertekqc`

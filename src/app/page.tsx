@@ -1,159 +1,149 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FlaskConical,
   Package,
+  Truck,
+  CheckCircle2,
   AlertTriangle,
-  Clock,
-  ArrowUpDown,
+  XCircle,
+  Lock,
   Plus,
   Search,
-  Filter,
-  FileText,
-  Upload,
   ExternalLink,
   RefreshCw,
   Database,
   Cloud,
-  CheckCircle2,
-  XCircle,
   Eye,
   Edit2,
   Trash2,
-  Layers,
   MapPin,
-  Flame,
-  Skull,
-  ShieldAlert,
   Download,
   X,
-  History
+  History,
+  FileText,
+  Upload,
+  LogOut,
+  User,
+  ShieldCheck,
+  ChevronRight,
+  Copy,
+  Check,
+  Calendar,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
+import { standardLocations, sixCheckpoints } from '@/lib/validations';
 
-interface Item {
+interface Material {
   id: number;
-  code: string;
-  name: string;
-  category: string;
-  cas_number: string | null;
-  unit: string;
-  current_stock: number;
-  minimum_stock: number;
-  location: string;
-  batch_number: string | null;
-  expiry_date: string | null;
-  hazard_classification: string;
-  document_url: string | null;
-  document_name: string | null;
-  notes: string | null;
-  is_low_stock?: boolean;
-  expiry_status?: 'good' | 'expiring_soon' | 'expired';
-}
-
-interface Transaction {
-  id: number;
-  item_id: number;
-  transaction_type: 'IN' | 'OUT' | 'ADJUSTMENT';
-  quantity: number;
-  previous_stock: number;
-  new_stock: number;
-  purpose: string | null;
-  performed_by: string;
-  notes: string | null;
-  created_at: string;
-  item_name?: string;
-  item_code?: string;
-  item_unit?: string;
-  item_category?: string;
+  no: string | null;
+  status: 'On The Way' | 'Analysis' | 'Canceled' | 'Done';
+  deliveryDate: string | null;
+  pointOfOrigin: string;
+  pointOfDelivery: string;
+  shippingRequirements: string | null;
+  shipmentBy: string | null;
+  itemDescription: string;
+  pic: string;
+  technicalProposalStatus: string | null;
+  costProposalStatus: string | null;
+  statusCoff: string | null;
+  noCoff: string | null;
+  analysisRequested: string | null;
+  finalStatusReport: string | null;
+  remarkRaw: string | null;
+  remarkStructured: string | null;
+  remarkParseNote: string | null;
+  fileUrl: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface Stats {
-  total_items: number;
-  low_stock_count: number;
-  expiring_count: number;
-  expired_count: number;
+  total_materials: number;
+  on_the_way: number;
+  analysis: number;
+  canceled: number;
+  done: number;
 }
 
-export default function InventoryDashboard() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+export default function LabLogixDashboard() {
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [loginInput, setLoginInput] = useState('Iwan Joko');
+  const [loginPassword, setLoginPassword] = useState('');
+
+  // Main Data States
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [stats, setStats] = useState<Stats>({
-    total_items: 0,
-    low_stock_count: 0,
-    expiring_count: 0,
-    expired_count: 0,
+    total_materials: 0,
+    on_the_way: 0,
+    analysis: 0,
+    canceled: 0,
+    done: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'catalog' | 'history' | 'locations'>('catalog');
 
-  // Search & Filter state
+  // Filters
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [stockFilter, setStockFilter] = useState<'all' | 'low_stock' | 'expiring' | 'expired'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'On The Way' | 'Analysis' | 'Canceled' | 'Done'>('all');
 
-  // Modals state
-  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<Item | null>(null);
-  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
-  const [selectedStockItem, setSelectedStockItem] = useState<Item | null>(null);
+  // Modals
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [activeUpdateTab, setActiveUpdateTab] = useState<'tab1' | 'tab2' | 'tab3' | 'tab4' | 'tab5'>('tab1');
+  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
 
-  // Form states
+  // Admin / Database Modal
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  const [adminData, setAdminData] = useState<any>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState('');
+  const [copiedConfig, setCopiedConfig] = useState(false);
+
+  // Activity Log Entry Form in Tab 4
+  const [newLogDate, setNewLogDate] = useState(new Date().toISOString().slice(0, 10));
+  const [newLogActivity, setNewLogActivity] = useState('');
+
+  // Forms State
   const [formData, setFormData] = useState({
-    code: '',
-    name: '',
-    category: 'Chemical',
-    cas_number: '',
-    unit: 'L',
-    current_stock: 0,
-    minimum_stock: 1,
-    location: '',
-    batch_number: '',
-    expiry_date: '',
-    hazard_classification: 'none',
-    document_url: '',
-    document_name: '',
-    notes: '',
+    no: '',
+    status: 'On The Way' as 'On The Way' | 'Analysis' | 'Canceled' | 'Done',
+    deliveryDate: new Date().toISOString().slice(0, 10),
+    pointOfOrigin: 'FPU',
+    customOrigin: '',
+    pointOfDelivery: 'Intertek Balikpapan',
+    customDelivery: '',
+    shippingRequirements: '',
+    shipmentBy: 'Altus Logistics',
+    itemDescription: '',
+    pic: '',
+    technicalProposalStatus: 'Approved',
+    costProposalStatus: 'Accepted',
+    statusCoff: 'Issued',
+    noCoff: '',
+    analysisRequested: '',
+    finalStatusReport: 'In Progress',
+    remarkRaw: '',
+    fileUrl: '',
   });
 
-  const [stockForm, setStockForm] = useState({
-    transaction_type: 'OUT' as 'IN' | 'OUT' | 'ADJUSTMENT',
-    quantity: 1,
-    purpose: '',
-    performed_by: '',
-    notes: '',
-  });
-
-  const [uploading, setUploading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [uploadingForId, setUploadingForId] = useState<number | null>(null);
+  const [modalUploading, setModalUploading] = useState(false);
+  const tableFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetUploadMaterialId, setTargetUploadMaterialId] = useState<number | null>(null);
 
-  // Load items and stats
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [itemsRes, statsRes, txRes] = await Promise.all([
-        fetch('/api/items'),
-        fetch('/api/stats'),
-        fetch('/api/transactions?limit=50'),
-      ]);
-
-      const itemsData = await itemsRes.json();
-      const statsData = await statsRes.json();
-      const txData = await txRes.json();
-
-      if (itemsData.success) setItems(itemsData.items);
-      if (statsData.success) setStats(statsData.stats);
-      if (txData.success) setTransactions(txData.transactions);
-    } catch (err) {
-      console.error('Failed to load data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Check login on mount
   useEffect(() => {
-    fetchData();
+    const saved = localStorage.getItem('lablogix_user');
+    if (saved) {
+      setCurrentUser(saved);
+    }
   }, []);
 
   const showToast = (msg: string) => {
@@ -161,93 +151,185 @@ export default function InventoryDashboard() {
     setTimeout(() => setToastMsg(null), 4000);
   };
 
-  // Open Add Item Modal
-  const handleOpenAdd = () => {
-    setEditingItem(null);
-    setFormData({
-      code: `LAB-${Math.floor(1000 + Math.random() * 9000)}`,
-      name: '',
-      category: 'Chemical',
-      cas_number: '',
-      unit: 'L',
-      current_stock: 1,
-      minimum_stock: 2,
-      location: 'Cabinet 1',
-      batch_number: '',
-      expiry_date: '',
-      hazard_classification: 'none',
-      document_url: '',
-      document_name: '',
-      notes: '',
-    });
-    setErrorMsg('');
-    setIsItemModalOpen(true);
+  // Fetch Materials and Stats
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [matRes, statsRes] = await Promise.all([
+        fetch('/api/materials'),
+        fetch('/api/stats'),
+      ]);
+
+      const matData = await matRes.json();
+      const statsData = await statsRes.json();
+
+      if (matData.success) {
+        setMaterials(matData.materials);
+      }
+      if (statsData.success) {
+        setStats(statsData.stats);
+      }
+    } catch (err) {
+      console.error('Failed to load materials:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Open Edit Item Modal
-  const handleOpenEdit = (item: Item) => {
-    setEditingItem(item);
-    setFormData({
-      code: item.code,
-      name: item.name,
-      category: item.category,
-      cas_number: item.cas_number || '',
-      unit: item.unit,
-      current_stock: item.current_stock,
-      minimum_stock: item.minimum_stock,
-      location: item.location,
-      batch_number: item.batch_number || '',
-      expiry_date: item.expiry_date || '',
-      hazard_classification: item.hazard_classification || 'none',
-      document_url: item.document_url || '',
-      document_name: item.document_name || '',
-      notes: item.notes || '',
-    });
-    setErrorMsg('');
-    setIsItemModalOpen(true);
-  };
+  useEffect(() => {
+    if (currentUser) {
+      fetchData();
+    }
+  }, [currentUser]);
 
-  // Save Item
-  const handleSaveItem = async (e: React.FormEvent) => {
+  // Login Handler
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('');
+    if (!loginInput.trim()) return;
+    const name = loginInput.trim();
+    setCurrentUser(name);
+    localStorage.setItem('lablogix_user', name);
+    showToast(`Selamat datang, ${name}!`);
+  };
+
+  // Logout Handler
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('lablogix_user');
+  };
+
+  // Open Add Material Modal
+  const handleOpenAdd = () => {
+    const nextNo = String(materials.length + 1).padStart(3, '0');
+    setFormData({
+      no: nextNo,
+      status: 'On The Way',
+      deliveryDate: new Date().toISOString().slice(0, 10),
+      pointOfOrigin: 'FPU',
+      customOrigin: '',
+      pointOfDelivery: 'Intertek Balikpapan',
+      customDelivery: '',
+      shippingRequirements: 'Standard sample packing',
+      shipmentBy: 'Altus Logistics',
+      itemDescription: '',
+      pic: currentUser || 'Iwan Joko',
+      technicalProposalStatus: 'Approved',
+      costProposalStatus: 'Accepted',
+      statusCoff: 'Issued',
+      noCoff: `COFF-${new Date().getFullYear()}-${String(materials.length + 80).padStart(3, '0')}`,
+      analysisRequested: '',
+      finalStatusReport: 'In Progress',
+      remarkRaw: `[${new Date().toISOString().slice(0, 10)}] ${currentUser || 'Staff'}: Material terdaftar dan siap dikirim.`,
+      fileUrl: '',
+    });
+    setIsAddModalOpen(true);
+  };
+
+  // Open Update Material Modal
+  const handleOpenUpdate = (material: Material) => {
+    setSelectedMaterial(material);
+    setActiveUpdateTab('tab1');
+    const isCustomOrigin = !standardLocations.includes(material.pointOfOrigin as any);
+    const isCustomDelivery = !standardLocations.includes(material.pointOfDelivery as any);
+
+    setFormData({
+      no: material.no || String(material.id).padStart(3, '0'),
+      status: material.status,
+      deliveryDate: material.deliveryDate || '',
+      pointOfOrigin: isCustomOrigin ? 'Custom' : material.pointOfOrigin,
+      customOrigin: isCustomOrigin ? material.pointOfOrigin : '',
+      pointOfDelivery: isCustomDelivery ? 'Custom' : material.pointOfDelivery,
+      customDelivery: isCustomDelivery ? material.pointOfDelivery : '',
+      shippingRequirements: material.shippingRequirements || '',
+      shipmentBy: material.shipmentBy || '',
+      itemDescription: material.itemDescription,
+      pic: currentUser || material.pic, // Locked to logged in user
+      technicalProposalStatus: material.technicalProposalStatus || '',
+      costProposalStatus: material.costProposalStatus || '',
+      statusCoff: material.statusCoff || '',
+      noCoff: material.noCoff || '',
+      analysisRequested: material.analysisRequested || '',
+      finalStatusReport: material.finalStatusReport || '',
+      remarkRaw: material.remarkRaw || '',
+      fileUrl: material.fileUrl || '',
+    });
+    setNewLogActivity('');
+    setIsUpdateModalOpen(true);
+  };
+
+  // Submit Add Material
+  const handleSaveAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalOrigin = formData.pointOfOrigin === 'Custom' ? formData.customOrigin : formData.pointOfOrigin;
+    const finalDelivery = formData.pointOfDelivery === 'Custom' ? formData.customDelivery : formData.pointOfDelivery;
 
     try {
-      const url = editingItem ? `/api/items/${editingItem.id}` : '/api/items';
-      const method = editingItem ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
+      const res = await fetch('/api/materials', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          pointOfOrigin: finalOrigin,
+          pointOfDelivery: finalDelivery,
+          pic: currentUser || 'Iwan Joko', // Locked PIC
+        }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        if (data.errors?.fieldErrors) {
-          const firstErr = Object.values(data.errors.fieldErrors)[0] as string[];
-          setErrorMsg(firstErr[0] || 'Validation failed');
-        } else {
-          setErrorMsg(data.error || 'Failed to save item');
-        }
+        alert(data.error || 'Gagal menambahkan material');
         return;
       }
 
-      showToast(editingItem ? 'Item updated successfully!' : 'New item added to inventory!');
-      setIsItemModalOpen(false);
+      showToast('Material berhasil ditambahkan!');
+      setIsAddModalOpen(false);
       fetchData();
     } catch (err: any) {
-      setErrorMsg(err.message || 'An error occurred');
+      alert(`Error: ${err.message}`);
     }
   };
 
-  // Delete Item
-  const handleDeleteItem = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this inventory item?')) return;
+  // Submit Update Material
+  const handleSaveUpdate = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedMaterial) return;
+
+    const finalOrigin = formData.pointOfOrigin === 'Custom' ? formData.customOrigin : formData.pointOfOrigin;
+    const finalDelivery = formData.pointOfDelivery === 'Custom' ? formData.customDelivery : formData.pointOfDelivery;
+
     try {
-      const res = await fetch(`/api/items/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/materials/${selectedMaterial.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          pointOfOrigin: finalOrigin,
+          pointOfDelivery: finalDelivery,
+          pic: currentUser || selectedMaterial.pic, // Locked PIC
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Gagal memperbarui material');
+        return;
+      }
+
+      showToast('Material berhasil diperbarui!');
+      setIsUpdateModalOpen(false);
+      fetchData();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  // Delete Material
+  const handleDeleteMaterial = async (id: number) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus data material ini?')) return;
+    try {
+      const res = await fetch(`/api/materials/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        showToast('Item deleted from inventory');
+        showToast('Material telah dihapus');
         fetchData();
       }
     } catch (err) {
@@ -255,58 +337,51 @@ export default function InventoryDashboard() {
     }
   };
 
-  // Open Stock Modal
-  const handleOpenStock = (item: Item, type: 'IN' | 'OUT' | 'ADJUSTMENT' = 'OUT') => {
-    setSelectedStockItem(item);
-    setStockForm({
-      transaction_type: type,
-      quantity: 1,
-      purpose: type === 'OUT' ? 'QC Sample Testing' : type === 'IN' ? 'Purchase Delivery' : 'Stock Audit',
-      performed_by: '',
-      notes: '',
-    });
-    setErrorMsg('');
-    setIsStockModalOpen(true);
+  // Quick Status Change in Modal Tab 1
+  const handleQuickStatusChange = (newStatus: 'On The Way' | 'Analysis' | 'Canceled' | 'Done') => {
+    setFormData(prev => ({ ...prev, status: newStatus }));
   };
 
-  // Submit Stock Transaction
-  const handleSaveStock = async (e: React.FormEvent) => {
+  // Activity Log Handlers (Tab 4)
+  const parsedLogs = useMemo(() => {
+    if (!formData.remarkRaw) return [];
+    return formData.remarkRaw
+      .split('<br>')
+      .map(entry => entry.trim())
+      .filter(entry => entry.length > 0);
+  }, [formData.remarkRaw]);
+
+  const handleAddLog = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStockItem) return;
-    setErrorMsg('');
+    if (!newLogActivity.trim()) return;
 
-    try {
-      const res = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          item_id: selectedStockItem.id,
-          ...stockForm,
-        }),
-      });
+    const newEntry = `[${newLogDate}] ${currentUser || 'Analyst'}: ${newLogActivity.trim()}`;
+    const updatedRemark = formData.remarkRaw
+      ? `${formData.remarkRaw}<br> ${newEntry}`
+      : newEntry;
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setErrorMsg(data.error || 'Failed to record stock movement');
-        return;
-      }
-
-      showToast(data.message || 'Stock successfully updated!');
-      setIsStockModalOpen(false);
-      fetchData();
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Transaction failed');
-    }
+    setFormData(prev => ({ ...prev, remarkRaw: updatedRemark }));
+    setNewLogActivity('');
+    showToast('Catatan ditambahkan ke riwayat!');
   };
 
-  // File Upload to RustFS S3
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDeleteLog = (indexToDelete: number) => {
+    const updatedLogs = parsedLogs.filter((_, idx) => idx !== indexToDelete);
+    const updatedRemark = updatedLogs.join('<br> ');
+    setFormData(prev => ({ ...prev, remarkRaw: updatedRemark }));
+  };
+
+  // File Upload Handlers (Versi Paksa - 100% Anti-Gagal)
+  const handleModalFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploading(true);
+    setModalUploading(true);
     const body = new FormData();
     body.append('file', file);
+    if (selectedMaterial) {
+      body.append('materialId', String(selectedMaterial.id));
+    }
 
     try {
       const res = await fetch('/api/upload', {
@@ -315,270 +390,547 @@ export default function InventoryDashboard() {
       });
       const data = await res.json();
       if (data.success) {
-        setFormData(prev => ({
-          ...prev,
-          document_url: data.url,
-          document_name: data.fileName,
-        }));
-        showToast(`File ${data.fileName} uploaded to RustFS S3!`);
+        setFormData(prev => ({ ...prev, fileUrl: data.url }));
+        showToast(`File ${data.fileName} berhasil diunggah! (${data.message})`);
       } else {
-        alert(data.error || 'Failed to upload document');
+        alert(data.error || 'Gagal mengunggah file');
       }
     } catch (err: any) {
       alert(`Upload error: ${err.message}`);
     } finally {
-      setUploading(false);
+      setModalUploading(false);
     }
   };
 
-  // Filtered Items
-  const filteredItems = useMemo(() => {
-    return items.filter(item => {
-      const matchesSearch =
-        search === '' ||
-        item.name.toLowerCase().includes(search.toLowerCase()) ||
-        item.code.toLowerCase().includes(search.toLowerCase()) ||
-        (item.cas_number && item.cas_number.toLowerCase().includes(search.toLowerCase())) ||
-        item.location.toLowerCase().includes(search.toLowerCase());
+  // Direct Table Row Upload Trigger
+  const triggerTableRowUpload = (materialId: number) => {
+    setTargetUploadMaterialId(materialId);
+    if (tableFileInputRef.current) {
+      tableFileInputRef.current.value = '';
+      tableFileInputRef.current.click();
+    }
+  };
 
-      const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
+  const handleTableFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetUploadMaterialId) return;
 
-      let matchesFilter = true;
-      if (stockFilter === 'low_stock') {
-        matchesFilter = item.current_stock <= item.minimum_stock;
-      } else if (stockFilter === 'expiring') {
-        matchesFilter = item.expiry_status === 'expiring_soon';
-      } else if (stockFilter === 'expired') {
-        matchesFilter = item.expiry_status === 'expired';
+    const matId = targetUploadMaterialId;
+    setUploadingForId(matId);
+
+    const body = new FormData();
+    body.append('file', file);
+    body.append('materialId', String(matId));
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Dokumen untuk Material #${matId} berhasil disimpan!`);
+        fetchData();
+      } else {
+        alert(data.error || 'Gagal mengunggah');
+      }
+    } catch (err: any) {
+      alert(`Upload error: ${err.message}`);
+    } finally {
+      setUploadingForId(null);
+      setTargetUploadMaterialId(null);
+    }
+  };
+
+  // Admin / Database Modal Handlers
+  const handleUnlockAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminLoading(true);
+    setAdminError('');
+
+    try {
+      const res = await fetch('/api/admin/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPasswordInput }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setAdminError(data.error || 'Password salah!');
+        return;
       }
 
-      return matchesSearch && matchesCategory && matchesFilter;
+      setIsAdminUnlocked(true);
+      setAdminData(data);
+    } catch (err: any) {
+      setAdminError(err.message);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleResetDatabase = async () => {
+    if (!confirm('PERINGATAN: Apakah Anda yakin ingin me-reset database dan men-seed ulang material standar LabLogix?')) {
+      return;
+    }
+
+    setAdminLoading(true);
+    try {
+      const res = await fetch('/api/admin/database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPasswordInput, action: 'reset' }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message);
+        fetchData();
+        // Refresh admin data info
+        const infoRes = await fetch('/api/admin/database', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: adminPasswordInput }),
+        });
+        const info = await infoRes.json();
+        setAdminData(info);
+      } else {
+        alert(data.error);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  // Filtered Materials list
+  const filteredMaterials = useMemo(() => {
+    return materials.filter(m => {
+      const matchesSearch =
+        search === '' ||
+        (m.itemDescription && m.itemDescription.toLowerCase().includes(search.toLowerCase())) ||
+        (m.no && m.no.toLowerCase().includes(search.toLowerCase())) ||
+        (m.pic && m.pic.toLowerCase().includes(search.toLowerCase())) ||
+        (m.pointOfOrigin && m.pointOfOrigin.toLowerCase().includes(search.toLowerCase())) ||
+        (m.pointOfDelivery && m.pointOfDelivery.toLowerCase().includes(search.toLowerCase())) ||
+        (m.shipmentBy && m.shipmentBy.toLowerCase().includes(search.toLowerCase())) ||
+        (m.analysisRequested && m.analysisRequested.toLowerCase().includes(search.toLowerCase())) ||
+        (m.noCoff && m.noCoff.toLowerCase().includes(search.toLowerCase()));
+
+      const matchesStatus = statusFilter === 'all' || m.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
     });
-  }, [items, search, selectedCategory, stockFilter]);
+  }, [materials, search, statusFilter]);
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Code', 'Name', 'Category', 'CAS', 'Stock', 'Unit', 'Min Stock', 'Location', 'Batch', 'Expiry Date', 'Hazard'];
-    const rows = filteredItems.map(i => [
-      i.code,
-      `"${i.name.replace(/"/g, '""')}"`,
-      i.category,
-      i.cas_number || '',
-      i.current_stock,
-      i.unit,
-      i.minimum_stock,
-      `"${i.location}"`,
-      i.batch_number || '',
-      i.expiry_date || '',
-      i.hazard_classification,
+    const headers = [
+      'No',
+      'Status',
+      'Delivery Date',
+      'Point of Origin',
+      'Point of Delivery',
+      'Shipping Requirements',
+      'Shipment By',
+      'Item Description',
+      'PIC',
+      'Technical Proposal Status',
+      'Cost Proposal Status',
+      'Status COFF',
+      'No COFF',
+      'Analysis Requested',
+      'Final Status Report',
+      'Remark Raw',
+      'LINK FILE'
+    ];
+
+    const rows = filteredMaterials.map(m => [
+      `"${m.no || ''}"`,
+      `"${m.status}"`,
+      `"${m.deliveryDate || ''}"`,
+      `"${m.pointOfOrigin}"`,
+      `"${m.pointOfDelivery}"`,
+      `"${(m.shippingRequirements || '').replace(/"/g, '""')}"`,
+      `"${m.shipmentBy || ''}"`,
+      `"${(m.itemDescription || '').replace(/"/g, '""')}"`,
+      `"${m.pic}"`,
+      `"${m.technicalProposalStatus || ''}"`,
+      `"${m.costProposalStatus || ''}"`,
+      `"${m.statusCoff || ''}"`,
+      `"${m.noCoff || ''}"`,
+      `"${(m.analysisRequested || '').replace(/"/g, '""')}"`,
+      `"${m.finalStatusReport || ''}"`,
+      `"${(m.remarkRaw || '').replace(/"/g, '""')}"`,
+      `"${m.fileUrl || ''}"`
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `inve_inventory_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `LabLogix_Material_Monitoring_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const categories = ['All', 'Chemical', 'Biological', 'Glassware', 'Consumable', 'Equipment', 'Other'];
+  // Status Badge Component
+  const renderStatusBadge = (status: string) => {
+    switch (status) {
+      case 'On The Way':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200 rounded-full shadow-sm">
+            <Truck className="w-3.5 h-3.5 text-sky-500" />
+            <span>On The Way</span>
+          </span>
+        );
+      case 'Analysis':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 rounded-full shadow-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <span>Analysis</span>
+          </span>
+        );
+      case 'Canceled':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 rounded-full shadow-sm">
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+            <span>Canceled</span>
+          </span>
+        );
+      case 'Done':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full shadow-sm">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Done</span>
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-block px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-md">
+            {status}
+          </span>
+        );
+    }
+  };
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Toast */}
-      {toastMsg && (
-        <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-3 transition-all animate-bounce">
-          <CheckCircle2 className="w-5 h-5" />
-          <span className="font-medium text-sm">{toastMsg}</span>
-        </div>
-      )}
-
-      {/* Top Navigation Bar */}
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
-              <FlaskConical className="w-6 h-6 text-white" />
+  // ==========================================
+  // VIEW: GERBANG LOGIN (Jika belum login)
+  // ==========================================
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-850 to-indigo-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+          <div className="p-8 text-center bg-slate-900 text-white relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-400 to-indigo-600 mx-auto flex items-center justify-center shadow-lg shadow-sky-500/30 mb-4">
+              <FlaskConical className="w-8 h-8 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-sky-200 to-sky-400 bg-clip-text text-transparent">
-                  inve
-                </span>
-                <span className="px-2 py-0.5 text-[10px] font-semibold bg-sky-950 text-sky-400 border border-sky-800 rounded-full">
-                  LAB INVENTORY
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 hidden sm:block">Laboratory Inventory & Reagent Management System</p>
+            <h1 className="text-2xl font-black tracking-tight text-white">LabLogix</h1>
+            <p className="text-xs text-sky-300 font-medium tracking-wide uppercase mt-1">
+              Material Monitoring & Testing System
+            </p>
+            <div className="inline-flex items-center gap-1.5 bg-slate-800 text-emerald-400 text-[11px] font-semibold px-3 py-1 rounded-full mt-3 border border-slate-700">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Gerbang Akses Terproteksi</span>
             </div>
           </div>
 
-          {/* Infrastructure Health Status & Adminer Link */}
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60 text-xs">
-              <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                PostgreSQL Live
-              </span>
-              <span className="text-slate-600">|</span>
-              <span className="flex items-center gap-1.5 text-sky-400 font-medium">
-                <Cloud className="w-3.5 h-3.5" />
-                RustFS S3 Ready
-              </span>
+          <form onSubmit={handleLogin} className="p-8 space-y-5">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Pilih atau Masukkan Nama PIC
+              </label>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  required
+                  placeholder="Nama Lengkap Anda / PIC"
+                  value={loginInput}
+                  onChange={e => setLoginInput(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50"
+                />
+
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  {['Iwan Joko', 'QC Analyst', 'Handayani', 'Field Inspector'].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setLoginInput(preset)}
+                      className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg border text-left truncate transition-colors ${
+                        loginInput === preset
+                          ? 'bg-sky-50 border-sky-400 text-sky-800'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <a
-              href="http://149.41.198.83:8080"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-semibold px-3 py-2 rounded-lg shadow-sm transition-all border border-indigo-400/30"
-              title="Open Adminer Database Manager"
-            >
-              <Database className="w-3.5 h-3.5" />
-              <span>Adminer DB</span>
-              <ExternalLink className="w-3 h-3 text-indigo-200" />
-            </a>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Kata Sandi / PIN (Opsional)
+              </label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={loginPassword}
+                onChange={e => setLoginPassword(e.target.value)}
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50"
+              />
+            </div>
 
             <button
+              type="submit"
+              className="w-full py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-sky-500/25 transition-all flex items-center justify-center gap-2"
+            >
+              <span>Masuk ke Dashboard</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            <div className="pt-2 text-center text-xs text-slate-400">
+              LabLogix QC &bull; Dokploy Cloud &bull; vector-intertek.web.id
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // VIEW: DASHBOARD UTAMA
+  // ==========================================
+  return (
+    <div className="min-h-screen bg-slate-100/70 flex flex-col font-sans">
+      {/* Hidden file input for direct table upload */}
+      <input
+        type="file"
+        ref={tableFileInputRef}
+        onChange={handleTableFileSelected}
+        className="hidden"
+      />
+
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="fixed top-5 right-5 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-slate-700 animate-in fade-in slide-in-from-top-4 duration-300">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span className="font-semibold text-xs">{toastMsg}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-400 via-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+              <FlaskConical className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-black tracking-tight text-white">LabLogix</span>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-sky-950 text-sky-400 border border-sky-800 rounded-full tracking-wide">
+                  MATERIAL MONITORING &amp; TESTING
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 hidden sm:block">
+                Intertek QC Tracking &bull; Dokploy Infra &bull; vector-intertek.web.id
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Logged in PIC badge */}
+            <div className="flex items-center gap-2 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+              <div className="w-6 h-6 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-[11px]">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <div className="leading-tight">
+                <span className="text-[10px] text-slate-400 block font-medium">Akun Login</span>
+                <span className="font-bold text-white text-xs">{currentUser}</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="ml-2 text-slate-400 hover:text-rose-400 p-1 rounded"
+                title="Logout"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Admin & Database Modal Button */}
+            <button
+              onClick={() => {
+                setIsAdminModalOpen(true);
+                setAdminError('');
+              }}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-sky-300 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-700 transition-all shadow-sm"
+              title="Koneksi & Database (Admin Protected)"
+            >
+              <Database className="w-3.5 h-3.5 text-sky-400" />
+              <span className="hidden sm:inline">Koneksi &amp; DB</span>
+            </button>
+
+            {/* Add New Material Button */}
+            <button
               onClick={handleOpenAdd}
-              className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold px-3 py-2 rounded-lg shadow-sm transition-all"
+              className="flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-md shadow-sky-500/20 transition-all"
             >
               <Plus className="w-4 h-4" />
-              <span>New Item</span>
+              <span>Tambah Material</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
-        {/* KPI / Stats Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* ========================================================
+            3. STANDARISASI 4 STATUS & 5 KARTU KPI INTERAKTIF
+           ======================================================== */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* Card 1: Total Material */}
           <div
-            onClick={() => setStockFilter('all')}
-            className={`p-4 rounded-xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow ${
-              stockFilter === 'all' ? 'border-sky-500 ring-2 ring-sky-500/20' : 'border-slate-200'
+            onClick={() => setStatusFilter('all')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${
+              statusFilter === 'all'
+                ? 'border-slate-900 ring-2 ring-slate-900/10 bg-slate-50/50'
+                : 'border-slate-200'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Items</span>
-              <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Material</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
                 <Package className="w-4 h-4" />
               </div>
             </div>
-            <div className="mt-2 text-2xl font-bold text-slate-900">{stats.total_items}</div>
-            <p className="mt-1 text-xs text-slate-500">Across all categories</p>
+            <div className="mt-2 text-2xl font-black text-slate-900">{stats.total_materials}</div>
+            <p className="mt-0.5 text-[11px] text-slate-500">Semua sampel terdaftar</p>
           </div>
 
+          {/* Card 2: On The Way */}
           <div
-            onClick={() => setStockFilter('low_stock')}
-            className={`p-4 rounded-xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow ${
-              stockFilter === 'low_stock' ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-slate-200'
+            onClick={() => setStatusFilter('On The Way')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${
+              statusFilter === 'On The Way'
+                ? 'border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/30'
+                : 'border-slate-200'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Low Stock</span>
-              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <span className="text-[11px] font-bold text-sky-700 uppercase tracking-wider">On The Way</span>
+              <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center">
+                <Truck className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-black text-sky-600">{stats.on_the_way}</div>
+            <p className="mt-0.5 text-[11px] text-sky-700/80">Dalam perjalanan logistik</p>
+          </div>
+
+          {/* Card 3: Analysis */}
+          <div
+            onClick={() => setStatusFilter('Analysis')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${
+              statusFilter === 'Analysis'
+                ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/30'
+                : 'border-slate-200'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Analysis</span>
+              <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center relative">
+                <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-amber-400 opacity-75"></span>
+                <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-black text-amber-600">{stats.analysis}</div>
+            <p className="mt-0.5 text-[11px] text-amber-700/80">Proses uji laboratorium</p>
+          </div>
+
+          {/* Card 4: Canceled */}
+          <div
+            onClick={() => setStatusFilter('Canceled')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${
+              statusFilter === 'Canceled'
+                ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/30'
+                : 'border-slate-200'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Canceled</span>
+              <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
                 <AlertTriangle className="w-4 h-4" />
               </div>
             </div>
-            <div className="mt-2 text-2xl font-bold text-amber-600">{stats.low_stock_count}</div>
-            <p className="mt-1 text-xs text-amber-700">At or below reorder level</p>
+            <div className="mt-2 text-2xl font-black text-rose-600">{stats.canceled}</div>
+            <p className="mt-0.5 text-[11px] text-rose-700/80">Pengujian dibatalkan</p>
           </div>
 
+          {/* Card 5: Done */}
           <div
-            onClick={() => setStockFilter('expiring')}
-            className={`p-4 rounded-xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow ${
-              stockFilter === 'expiring' ? 'border-orange-500 ring-2 ring-orange-500/20' : 'border-slate-200'
+            onClick={() => setStatusFilter('Done')}
+            className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${
+              statusFilter === 'Done'
+                ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/30'
+                : 'border-slate-200'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Expiring Soon</span>
-              <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
-                <Clock className="w-4 h-4" />
+              <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Done</span>
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                <CheckCircle2 className="w-4 h-4" />
               </div>
             </div>
-            <div className="mt-2 text-2xl font-bold text-orange-600">{stats.expiring_count}</div>
-            <p className="mt-1 text-xs text-orange-700">Within the next 30 days</p>
-          </div>
-
-          <div
-            onClick={() => setStockFilter('expired')}
-            className={`p-4 rounded-xl border transition-all cursor-pointer bg-white shadow-sm hover:shadow ${
-              stockFilter === 'expired' ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-slate-200'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Expired</span>
-              <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-                <XCircle className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-2 text-2xl font-bold text-rose-600">{stats.expired_count}</div>
-            <p className="mt-1 text-xs text-rose-700">Dispose according to SOP</p>
+            <div className="mt-2 text-2xl font-black text-emerald-600">{stats.done}</div>
+            <p className="mt-0.5 text-[11px] text-emerald-700/80">Laporan selesai terbit</p>
           </div>
         </div>
 
-        {/* Tab Navigation & Search Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('catalog')}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${
-                activeTab === 'catalog'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-200/60'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Inventory Catalog</span>
-              <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-200">
-                {items.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${
-                activeTab === 'history'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-200/60'
-              }`}
-            >
-              <History className="w-4 h-4" />
-              <span>Stock Transactions</span>
-              <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-200">
-                {transactions.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('locations')}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${
-                activeTab === 'locations'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-200/60'
-              }`}
-            >
-              <MapPin className="w-4 h-4" />
-              <span>Locations</span>
-            </button>
+        {/* Toolbar: Search & Action Buttons */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cari deskripsi sampel, No, PIC, origin, COFF..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
+            {statusFilter !== 'all' && (
+              <button
+                onClick={() => setStatusFilter('all')}
+                className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg flex items-center gap-1"
+              >
+                <span>Reset Filter ({statusFilter})</span>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-sm"
-              title="Export Current View as CSV"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 shadow-sm transition-colors"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
               <span>Export CSV</span>
             </button>
             <button
               onClick={fetchData}
-              className="p-2 text-slate-500 hover:text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-sm"
+              className="p-2 text-slate-600 hover:text-slate-900 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 shadow-sm transition-colors"
               title="Refresh Data"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -586,576 +938,328 @@ export default function InventoryDashboard() {
           </div>
         </div>
 
-        {/* TAB 1: INVENTORY CATALOG */}
-        {activeTab === 'catalog' && (
-          <div className="space-y-4">
-            {/* Filter toolbar */}
-            <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search by reagent name, code, CAS #, location..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                />
-                {search && (
-                  <button
-                    onClick={() => setSearch('')}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Category Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1.5 rounded-full font-medium transition-all whitespace-nowrap ${
-                      selectedCategory === cat
-                        ? 'bg-sky-600 text-white shadow-sm'
-                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-100/75 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
-                    <tr>
-                      <th className="py-3 px-4">Item Code & Name</th>
-                      <th className="py-3 px-3">Category</th>
-                      <th className="py-3 px-3">CAS / Batch</th>
-                      <th className="py-3 px-4 text-right">Current Stock</th>
-                      <th className="py-3 px-3">Location</th>
-                      <th className="py-3 px-3">Expiry</th>
-                      <th className="py-3 px-3">Hazard</th>
-                      <th className="py-3 px-3">Document</th>
-                      <th className="py-3 px-4 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredItems.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="py-12 text-center text-slate-400">
-                          <Package className="w-12 h-12 mx-auto text-slate-300 mb-2" />
-                          <p className="font-medium text-slate-600">No laboratory items found</p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            Try adjusting your search criteria or add a new inventory item.
-                          </p>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredItems.map(item => {
-                        const isLow = item.current_stock <= item.minimum_stock;
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-4">
-                              <div className="font-semibold text-slate-900">{item.name}</div>
-                              <div className="text-xs font-mono text-slate-500 mt-0.5">{item.code}</div>
-                            </td>
-
-                            <td className="py-3 px-3">
-                              <span className="inline-block px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-md border border-slate-200">
-                                {item.category}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-3 text-xs text-slate-600 font-mono">
-                              {item.cas_number && <div>CAS: {item.cas_number}</div>}
-                              {item.batch_number && <div className="text-slate-400 text-[11px]">{item.batch_number}</div>}
-                              {!item.cas_number && !item.batch_number && <span className="text-slate-300">-</span>}
-                            </td>
-
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <span className="font-bold text-slate-900 text-base">{item.current_stock}</span>
-                                <span className="text-xs text-slate-500">{item.unit}</span>
-                              </div>
-                              {isLow && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                  <AlertTriangle className="w-2.5 h-2.5" /> Min: {item.minimum_stock}
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-3 text-xs text-slate-700 font-medium">
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3 text-slate-400" />
-                                {item.location}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-3 text-xs">
-                              {item.expiry_date ? (
-                                item.expiry_status === 'expired' ? (
-                                  <span className="text-rose-700 font-semibold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                    Expired: {item.expiry_date}
-                                  </span>
-                                ) : item.expiry_status === 'expiring_soon' ? (
-                                  <span className="text-orange-700 font-semibold bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                                    Exp: {item.expiry_date}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-600">{item.expiry_date}</span>
-                                )
-                              ) : (
-                                <span className="text-slate-400">N/A</span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-3">
-                              {item.hazard_classification === 'flammable' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-                                  <Flame className="w-3 h-3 text-red-500" /> Flammable
-                                </span>
-                              )}
-                              {item.hazard_classification === 'corrosive' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full">
-                                  <ShieldAlert className="w-3 h-3 text-amber-600" /> Corrosive
-                                </span>
-                              )}
-                              {item.hazard_classification === 'toxic' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
-                                  <Skull className="w-3 h-3 text-purple-600" /> Toxic
-                                </span>
-                              )}
-                              {item.hazard_classification === 'biohazard' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-full">
-                                  Biohazard
-                                </span>
-                              )}
-                              {item.hazard_classification === 'oxidizing' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-yellow-800 bg-yellow-50 border border-yellow-300 px-2 py-0.5 rounded-full">
-                                  Oxidizing
-                                </span>
-                              )}
-                              {(!item.hazard_classification || item.hazard_classification === 'none') && (
-                                <span className="text-slate-400 text-xs">None</span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-3 text-xs">
-                              {item.document_url ? (
-                                <a
-                                  href={item.document_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-sky-600 hover:text-sky-800 font-medium hover:underline"
-                                  title={item.document_name || 'Download MSDS/Spec'}
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                  <span className="truncate max-w-[80px]">{item.document_name || 'MSDS'}</span>
-                                </a>
-                              ) : (
-                                <span className="text-slate-300">-</span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-4 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => handleOpenStock(item, 'OUT')}
-                                  className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded transition-colors"
-                                  title="Check Out / Use Stock"
-                                >
-                                  Use
-                                </button>
-                                <button
-                                  onClick={() => handleOpenStock(item, 'IN')}
-                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded transition-colors"
-                                  title="Add / Receive Stock"
-                                >
-                                  + In
-                                </button>
-                                <button
-                                  onClick={() => handleOpenEdit(item)}
-                                  className="p-1 text-slate-400 hover:text-slate-700 rounded transition-colors"
-                                  title="Edit Item Details"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteItem(item.id)}
-                                  className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                                  title="Delete Item"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: STOCK TRANSACTION HISTORY */}
-        {activeTab === 'history' && (
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm">Audit Trail / Stock Transaction Log</h3>
-                <p className="text-xs text-slate-500">Record of all stock received, withdrawn, or adjusted.</p>
-              </div>
-              <span className="text-xs font-semibold text-slate-600">Showing last 50 transactions</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-100/75 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+        {/* ========================================================
+            TABEL MONITORING UTAMA (19 ATRIBUT MODEL)
+           ======================================================== */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-900 text-white font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th className="py-3.5 px-3">No</th>
+                  <th className="py-3.5 px-3">Status</th>
+                  <th className="py-3.5 px-3">Tgl Kirim</th>
+                  <th className="py-3.5 px-3">Origin &rarr; Delivery</th>
+                  <th className="py-3.5 px-4 min-w-[200px]">Deskripsi Sampel / Material</th>
+                  <th className="py-3.5 px-3">PIC (Locked)</th>
+                  <th className="py-3.5 px-3">Analisis yang Diminta</th>
+                  <th className="py-3.5 px-3 text-center">LINK FILE (Kolom S)</th>
+                  <th className="py-3.5 px-3 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredMaterials.length === 0 ? (
                   <tr>
-                    <th className="py-3 px-4">Timestamp</th>
-                    <th className="py-3 px-4">Item</th>
-                    <th className="py-3 px-3">Type</th>
-                    <th className="py-3 px-3 text-right">Quantity</th>
-                    <th className="py-3 px-3 text-right">Stock (Before &rarr; After)</th>
-                    <th className="py-3 px-4">Purpose / Experiment</th>
-                    <th className="py-3 px-4">Analyst / Staff</th>
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                      <Package className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+                      <p className="font-bold text-slate-600 text-sm">Tidak ada material terdaftar</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Sesuaikan kata kunci pencarian atau klik tombol &quot;Tambah Material&quot;.
+                      </p>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {transactions.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
-                        No transactions recorded yet.
+                ) : (
+                  filteredMaterials.map(item => (
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                      {/* No */}
+                      <td className="py-3 px-3 font-mono font-bold text-slate-700">
+                        {item.no || String(item.id).padStart(3, '0')}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        {renderStatusBadge(item.status)}
+                      </td>
+
+                      {/* Delivery Date */}
+                      <td className="py-3 px-3 text-slate-600 font-medium whitespace-nowrap">
+                        {item.deliveryDate || '-'}
+                      </td>
+
+                      {/* Origin -> Delivery */}
+                      <td className="py-3 px-3">
+                        <div className="font-semibold text-slate-800">{item.pointOfOrigin}</div>
+                        <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <span>&rarr;</span>
+                          <span>{item.pointOfDelivery}</span>
+                        </div>
+                      </td>
+
+                      {/* Description */}
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-900">{item.itemDescription}</div>
+                        {item.shippingRequirements && (
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-xs">
+                            {item.shippingRequirements}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* PIC */}
+                      <td className="py-3 px-3">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                          <Lock className="w-3 h-3 text-amber-600" />
+                          <span>{item.pic}</span>
+                        </span>
+                      </td>
+
+                      {/* Analysis Requested */}
+                      <td className="py-3 px-3 text-slate-700 max-w-xs">
+                        <span className="line-clamp-2">{item.analysisRequested || '-'}</span>
+                      </td>
+
+                      {/* ========================================================
+                          6. FITUR UPLOAD & PREVIEW FILE (KOLOM S - LINK FILE)
+                         ======================================================== */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        {item.fileUrl ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            <a
+                              href={item.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-sky-50 text-sky-700 border border-sky-300 hover:bg-sky-100 rounded-lg transition-colors shadow-sm"
+                              title="Buka dokumen di tab baru"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Preview</span>
+                            </a>
+                            <button
+                              onClick={() => triggerTableRowUpload(item.id)}
+                              disabled={uploadingForId === item.id}
+                              className="p-1 text-slate-400 hover:text-sky-600 rounded"
+                              title="Ganti File"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => triggerTableRowUpload(item.id)}
+                            disabled={uploadingForId === item.id}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg transition-colors"
+                          >
+                            <Upload className="w-3.5 h-3.5 text-slate-500" />
+                            <span>{uploadingForId === item.id ? 'Mengunggah...' : '+ Upload'}</span>
+                          </button>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleOpenUpdate(item)}
+                            className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1"
+                            title="Buka Modal Update 5 Tab"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Detail</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteMaterial(item.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded"
+                            title="Hapus Material"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    transactions.map(tx => (
-                      <tr key={tx.id} className="hover:bg-slate-50/80">
-                        <td className="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">
-                          {new Date(tx.created_at).toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="font-semibold text-slate-900">{tx.item_name}</span>
-                          <span className="block text-xs font-mono text-slate-500">{tx.item_code}</span>
-                        </td>
-                        <td className="py-3 px-3">
-                          {tx.transaction_type === 'IN' && (
-                            <span className="inline-block px-2 py-0.5 text-xs font-bold text-emerald-800 bg-emerald-100 rounded">
-                              + STOCK IN
-                            </span>
-                          )}
-                          {tx.transaction_type === 'OUT' && (
-                            <span className="inline-block px-2 py-0.5 text-xs font-bold text-amber-800 bg-amber-100 rounded">
-                              - STOCK OUT
-                            </span>
-                          )}
-                          {tx.transaction_type === 'ADJUSTMENT' && (
-                            <span className="inline-block px-2 py-0.5 text-xs font-bold text-indigo-800 bg-indigo-100 rounded">
-                              ADJUSTMENT
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-right font-bold text-slate-900">
-                          {tx.quantity} {tx.item_unit}
-                        </td>
-                        <td className="py-3 px-3 text-right text-xs text-slate-600 font-mono">
-                          {tx.previous_stock} &rarr; <span className="font-bold text-slate-900">{tx.new_stock}</span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-700 text-xs">
-                          {tx.purpose || '-'}
-                          {tx.notes && <span className="block text-[11px] text-slate-400 italic">{tx.notes}</span>}
-                        </td>
-                        <td className="py-3 px-4 text-slate-800 font-medium text-xs">
-                          {tx.performed_by}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-
-        {/* TAB 3: LOCATIONS VIEW */}
-        {activeTab === 'locations' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from(new Set(items.map(i => i.location))).map(loc => {
-              const locItems = items.filter(i => i.location === loc);
-              return (
-                <div key={loc} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                        <MapPin className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{loc}</h4>
-                        <span className="text-xs text-slate-500">{locItems.length} items stored</span>
-                      </div>
-                    </div>
-                  </div>
-                  <ul className="divide-y divide-slate-50 text-xs max-h-48 overflow-y-auto">
-                    {locItems.map(item => (
-                      <li key={item.id} className="py-1.5 flex items-center justify-between">
-                        <span className="font-medium text-slate-800 truncate max-w-[180px]">{item.name}</span>
-                        <span className="font-bold text-slate-900 font-mono">
-                          {item.current_stock} {item.unit}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        </div>
       </main>
 
-      {/* MODAL: ADD / EDIT ITEM */}
-      {isItemModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 my-8 overflow-hidden">
+      {/* ========================================================
+          MODAL 1: TAMBAH MATERIAL (DENGAN LOCKED PIC)
+         ======================================================== */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-100 my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FlaskConical className="w-5 h-5 text-sky-400" />
-                <h3 className="font-bold text-base">
-                  {editingItem ? `Edit Item: ${editingItem.code}` : 'Add New Laboratory Item'}
-                </h3>
+                <Plus className="w-5 h-5 text-sky-400" />
+                <h3 className="font-bold text-sm sm:text-base">Tambah Material Baru</h3>
               </div>
-              <button
-                onClick={() => setIsItemModalOpen(false)}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
+              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveItem} className="p-6 space-y-4">
-              {errorMsg && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{errorMsg}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <form onSubmit={handleSaveAdd} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Item Code / SKU *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.code}
-                    onChange={e => setFormData({ ...formData, code: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-sky-500"
-                    placeholder="e.g. CHM-001"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Category *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Status Material *</label>
                   <select
-                    value={formData.category}
-                    onChange={e => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500"
+                    value={formData.status}
+                    onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-semibold bg-white"
                   >
-                    <option value="Chemical">Chemical / Solvent</option>
-                    <option value="Biological">Biological / Reagent</option>
-                    <option value="Glassware">Glassware</option>
-                    <option value="Consumable">Consumable / PPE</option>
-                    <option value="Equipment">Lab Equipment</option>
-                    <option value="Other">Other</option>
+                    <option value="On The Way">On The Way</option>
+                    <option value="Analysis">Analysis</option>
+                    <option value="Canceled">Canceled</option>
+                    <option value="Done">Done</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Tanggal Pengiriman</label>
+                  <input
+                    type="date"
+                    value={formData.deliveryDate}
+                    onChange={e => setFormData({ ...formData, deliveryDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Item Name / Description *</label>
+                <label className="block font-bold text-slate-700 mb-1">Deskripsi Material / Sampel *</label>
                 <input
                   type="text"
                   required
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-sky-500"
-                  placeholder="e.g. Sulfuric Acid 98% AR Grade"
+                  placeholder="e.g. Crude Oil Sample Wellhead A-12"
+                  value={formData.itemDescription}
+                  onChange={e => setFormData({ ...formData, itemDescription: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              {/* Rute Dropdowns: NO quick-selection pills */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">CAS Registry Number</label>
-                  <input
-                    type="text"
-                    value={formData.cas_number}
-                    onChange={e => setFormData({ ...formData, cas_number: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
-                    placeholder="e.g. 7664-93-9"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Unit of Measure *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.unit}
-                    onChange={e => setFormData({ ...formData, unit: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    placeholder="e.g. L, mL, g, kg, pcs, box"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Storage Location *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.location}
-                    onChange={e => setFormData({ ...formData, location: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    placeholder="e.g. Acid Cabinet 2, Shelf 3"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                {!editingItem && (
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Initial Stock *</label>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      required
-                      value={formData.current_stock}
-                      onChange={e => setFormData({ ...formData, current_stock: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Minimum Threshold *</label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    required
-                    value={formData.minimum_stock}
-                    onChange={e => setFormData({ ...formData, minimum_stock: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Batch / Lot Number</label>
-                  <input
-                    type="text"
-                    value={formData.batch_number}
-                    onChange={e => setFormData({ ...formData, batch_number: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
-                    placeholder="LOT-2026-X"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Expiry Date</label>
-                  <input
-                    type="date"
-                    value={formData.expiry_date}
-                    onChange={e => setFormData({ ...formData, expiry_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Hazard Classification</label>
+                  <label className="block font-bold text-slate-700 mb-1">Point of Origin *</label>
                   <select
-                    value={formData.hazard_classification}
-                    onChange={e => setFormData({ ...formData, hazard_classification: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    value={formData.pointOfOrigin}
+                    onChange={e => setFormData({ ...formData, pointOfOrigin: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
                   >
-                    <option value="none">None / Non-Hazardous</option>
-                    <option value="flammable">Flammable</option>
-                    <option value="corrosive">Corrosive (Acid/Base)</option>
-                    <option value="toxic">Toxic / Poison</option>
-                    <option value="oxidizing">Oxidizing Agent</option>
-                    <option value="biohazard">Biohazard</option>
+                    {standardLocations.map(loc => (
+                      <option key={loc} value={loc}>
+                        {loc}
+                      </option>
+                    ))}
+                    <option value="Custom">-- Input Lokasi Kustom --</option>
                   </select>
+                  {formData.pointOfOrigin === 'Custom' && (
+                    <input
+                      type="text"
+                      placeholder="Ketik lokasi origin kustom..."
+                      value={formData.customOrigin}
+                      onChange={e => setFormData({ ...formData, customOrigin: e.target.value })}
+                      className="mt-2 w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                  )}
                 </div>
 
-                {/* RustFS S3 File Upload */}
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    MSDS / Safety Sheet (Upload to RustFS S3)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <label className="flex-1 cursor-pointer flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-slate-300 hover:border-sky-500 rounded-lg text-slate-600 bg-slate-50 transition-colors">
-                      <Upload className="w-4 h-4 text-slate-400" />
-                      <span className="truncate">
-                        {uploading
-                          ? 'Uploading to S3...'
-                          : formData.document_name
-                          ? formData.document_name
-                          : 'Choose file (PDF, Doc)'}
-                      </span>
-                      <input
-                        type="file"
-                        onChange={handleFileUpload}
-                        disabled={uploading}
-                        className="hidden"
-                      />
+                  <label className="block font-bold text-slate-700 mb-1">Point of Delivery *</label>
+                  <select
+                    value={formData.pointOfDelivery}
+                    onChange={e => setFormData({ ...formData, pointOfDelivery: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                  >
+                    {standardLocations.map(loc => (
+                      <option key={loc} value={loc}>
+                        {loc}
+                      </option>
+                    ))}
+                    <option value="Custom">-- Input Lokasi Kustom --</option>
+                  </select>
+                  {formData.pointOfDelivery === 'Custom' && (
+                    <input
+                      type="text"
+                      placeholder="Ketik lokasi delivery kustom..."
+                      value={formData.customDelivery}
+                      onChange={e => setFormData({ ...formData, customDelivery: e.target.value })}
+                      className="mt-2 w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Locked PIC Requirement */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700 flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>PIC (Penanggung Jawab)</span>
                     </label>
-                    {formData.document_url && (
-                      <a
-                        href={formData.document_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 text-sky-600 hover:bg-sky-50 rounded border border-sky-200"
-                        title="View document"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </a>
-                    )}
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded-full border border-amber-300">
+                      Akun Login (Terkunci)
+                    </span>
                   </div>
+                  <input
+                    type="text"
+                    disabled
+                    readOnly
+                    value={currentUser}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-100 font-bold text-slate-700 cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Ekspedisi (Shipment By)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Altus Logistics / Kurir Internal"
+                    value={formData.shipmentBy}
+                    onChange={e => setFormData({ ...formData, shipmentBy: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Notes & Handling Instructions</label>
+                <label className="block font-bold text-slate-700 mb-1">Analisis yang Diminta</label>
                 <textarea
                   rows={2}
-                  value={formData.notes}
-                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
-                  placeholder="e.g. Store in dark glass bottle. Keep away from ignition sources."
+                  placeholder="e.g. BS&W, API Gravity, H2S Content, Kinematic Viscosity"
+                  value={formData.analysisRequested}
+                  onChange={e => setFormData({ ...formData, analysisRequested: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Kebutuhan Pengiriman</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Suhu dingin 4°C, botol kaca gelap"
+                  value={formData.shippingRequirements}
+                  onChange={e => setFormData({ ...formData, shippingRequirements: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl"
                 />
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsItemModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-semibold text-xs transition-colors"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-lg shadow-sm transition-colors"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md"
                 >
-                  {editingItem ? 'Save Changes' : 'Create Item'}
+                  Simpan Material
                 </button>
               </div>
             </form>
@@ -1163,155 +1267,740 @@ export default function InventoryDashboard() {
         </div>
       )}
 
-      {/* MODAL: STOCK IN / OUT / ADJUSTMENT */}
-      {isStockModalOpen && selectedStockItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
+      {/* ========================================================
+          MODAL 2: UPDATE MATERIAL 5 TAB TERSTRUKTUR
+         ======================================================== */}
+      {isUpdateModalOpen && selectedMaterial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full border border-slate-100 my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-base">Record Stock Movement</h3>
-                <p className="text-xs text-sky-300">{selectedStockItem.name}</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base">Update Material #{formData.no}</h3>
+                  {renderStatusBadge(formData.status)}
+                </div>
+                <p className="text-xs text-slate-400 truncate max-w-md mt-0.5">
+                  {selectedMaterial.itemDescription}
+                </p>
+              </div>
+              <button onClick={() => setIsUpdateModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 5 Tab Navigation Buttons */}
+            <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-2 gap-1 overflow-x-auto text-xs font-bold">
+              {[
+                { id: 'tab1', label: '1. Status & Sampel' },
+                { id: 'tab2', label: '2. Rute & Pengiriman' },
+                { id: 'tab3', label: '3. Proposal & Laporan' },
+                { id: 'tab4', label: '4. Log Aktivitas' },
+                { id: 'tab5', label: '5. Lampiran File' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveUpdateTab(tab.id as any)}
+                  className={`px-3 py-2.5 rounded-t-xl transition-all whitespace-nowrap border-b-2 ${
+                    activeUpdateTab === tab.id
+                      ? 'bg-white text-slate-900 border-sky-500 shadow-sm'
+                      : 'text-slate-500 border-transparent hover:text-slate-800'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-6 text-xs">
+              {/* TAB 1: STATUS & SAMPEL */}
+              {activeUpdateTab === 'tab1' && (
+                <div className="space-y-4">
+                  {/* Nomor urut (disabled) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Nomor Urut (Otomatis)</label>
+                      <input
+                        type="text"
+                        disabled
+                        readOnly
+                        value={formData.no}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-100 font-mono font-bold text-slate-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Status Saat Ini</label>
+                      <select
+                        value={formData.status}
+                        onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold bg-white"
+                      >
+                        <option value="On The Way">On The Way</option>
+                        <option value="Analysis">Analysis</option>
+                        <option value="Canceled">Canceled</option>
+                        <option value="Done">Done</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Tombol Ubah Cepat Status */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1.5">Ubah Cepat Status</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleQuickStatusChange('On The Way')}
+                        className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all ${
+                          formData.status === 'On The Way'
+                            ? 'bg-sky-600 text-white shadow-md'
+                            : 'bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200'
+                        }`}
+                      >
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>On The Way</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleQuickStatusChange('Analysis')}
+                        className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all ${
+                          formData.status === 'Analysis'
+                            ? 'bg-amber-500 text-slate-950 shadow-md'
+                            : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+                        <span>Analysis</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleQuickStatusChange('Canceled')}
+                        className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all ${
+                          formData.status === 'Canceled'
+                            ? 'bg-rose-600 text-white shadow-md'
+                            : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                        }`}
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Canceled</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleQuickStatusChange('Done')}
+                        className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all ${
+                          formData.status === 'Done'
+                            ? 'bg-emerald-600 text-white shadow-md'
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Done</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Tanggal Pengiriman</label>
+                      <input
+                        type="date"
+                        value={formData.deliveryDate}
+                        onChange={e => setFormData({ ...formData, deliveryDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                      />
+                    </div>
+
+                    {/* Locked PIC Requirement */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-700 flex items-center gap-1">
+                          <Lock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>PIC (Penanggung Jawab)</span>
+                        </label>
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded-full border border-amber-300">
+                          Akun Login (Terkunci)
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        disabled
+                        readOnly
+                        value={currentUser}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-100 font-bold text-slate-700 cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Deskripsi Sampel / Material *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.itemDescription}
+                      onChange={e => setFormData({ ...formData, itemDescription: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Analisis yang Diminta</label>
+                    <textarea
+                      rows={2}
+                      value={formData.analysisRequested}
+                      onChange={e => setFormData({ ...formData, analysisRequested: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: RUTE & PENGIRIMAN (DENGAN 6 CHECKPOINT VISUALISASI) */}
+              {activeUpdateTab === 'tab2' && (
+                <div className="space-y-5">
+                  {/* Dropdowns (No pills) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Point of Origin *</label>
+                      <select
+                        value={formData.pointOfOrigin}
+                        onChange={e => setFormData({ ...formData, pointOfOrigin: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                      >
+                        {standardLocations.map(loc => (
+                          <option key={loc} value={loc}>
+                            {loc}
+                          </option>
+                        ))}
+                        <option value="Custom">-- Input Lokasi Kustom --</option>
+                      </select>
+                      {formData.pointOfOrigin === 'Custom' && (
+                        <input
+                          type="text"
+                          placeholder="Ketik lokasi origin kustom..."
+                          value={formData.customOrigin}
+                          onChange={e => setFormData({ ...formData, customOrigin: e.target.value })}
+                          className="mt-2 w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        />
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Point of Delivery *</label>
+                      <select
+                        value={formData.pointOfDelivery}
+                        onChange={e => setFormData({ ...formData, pointOfDelivery: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                      >
+                        {standardLocations.map(loc => (
+                          <option key={loc} value={loc}>
+                            {loc}
+                          </option>
+                        ))}
+                        <option value="Custom">-- Input Lokasi Kustom --</option>
+                      </select>
+                      {formData.pointOfDelivery === 'Custom' && (
+                        <input
+                          type="text"
+                          placeholder="Ketik lokasi delivery kustom..."
+                          value={formData.customDelivery}
+                          onChange={e => setFormData({ ...formData, customDelivery: e.target.value })}
+                          className="mt-2 w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Kebutuhan Pengiriman</label>
+                      <input
+                        type="text"
+                        value={formData.shippingRequirements}
+                        onChange={e => setFormData({ ...formData, shippingRequirements: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Ekspedisi (Shipment By)</label>
+                      <input
+                        type="text"
+                        value={formData.shipmentBy}
+                        onChange={e => setFormData({ ...formData, shipmentBy: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  {/* ========================================================
+                      4. VISUALISASI TREK 6 CHECKPOINT RUTE LOGISTIK
+                     ======================================================== */}
+                  <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 rounded-2xl text-white space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-sky-400" />
+                        <span className="font-bold text-xs uppercase tracking-wider text-sky-200">
+                          Trek 6 Checkpoint Rute Logistik
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">Klik checkpoint untuk ubah origin</span>
+                    </div>
+
+                    <div className="relative pt-8 pb-4">
+                      {/* Connecting Line */}
+                      <div className="absolute top-12 left-6 right-6 h-1 bg-slate-700 z-0"></div>
+
+                      {/* 6 Checkpoint Nodes */}
+                      <div className="relative z-10 grid grid-cols-6 gap-1">
+                        {sixCheckpoints.map((cp, idx) => {
+                          const isActive = formData.pointOfOrigin === cp;
+                          return (
+                            <div
+                              key={cp}
+                              onClick={() => setFormData({ ...formData, pointOfOrigin: cp })}
+                              className="flex flex-col items-center cursor-pointer group"
+                            >
+                              {/* Animated Car Indicator "MOBIL DI SINI" */}
+                              {isActive && (
+                                <div className="absolute -top-6 flex flex-col items-center animate-bounce z-20">
+                                  <span className="px-2 py-0.5 text-[9px] font-black bg-sky-400 text-slate-950 rounded-full shadow-lg shadow-sky-400/50 uppercase tracking-tighter whitespace-nowrap">
+                                    MOBIL DI SINI
+                                  </span>
+                                  <Truck className="w-4 h-4 text-sky-300 mt-0.5" />
+                                </div>
+                              )}
+
+                              {/* Dot Node */}
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-md ${
+                                  isActive
+                                    ? 'bg-sky-400 text-slate-950 ring-4 ring-sky-400/30 scale-110'
+                                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-600'
+                                }`}
+                              >
+                                {idx + 1}
+                              </div>
+
+                              {/* Label */}
+                              <span
+                                className={`mt-2 text-center text-[10px] font-semibold leading-tight max-w-[80px] transition-colors ${
+                                  isActive ? 'text-sky-300 font-bold' : 'text-slate-400 group-hover:text-slate-200'
+                                }`}
+                              >
+                                {cp}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: PROPOSAL, COFF & LAPORAN */}
+              {activeUpdateTab === 'tab3' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Technical Proposal Status</label>
+                      <input
+                        type="text"
+                        value={formData.technicalProposalStatus}
+                        onChange={e => setFormData({ ...formData, technicalProposalStatus: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                        placeholder="e.g. Approved / Submitted"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Cost Proposal Status</label>
+                      <input
+                        type="text"
+                        value={formData.costProposalStatus}
+                        onChange={e => setFormData({ ...formData, costProposalStatus: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                        placeholder="e.g. Accepted / In Review"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Status COFF</label>
+                      <input
+                        type="text"
+                        value={formData.statusCoff}
+                        onChange={e => setFormData({ ...formData, statusCoff: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                        placeholder="e.g. Issued / Pending"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">No. COFF</label>
+                      <input
+                        type="text"
+                        value={formData.noCoff}
+                        onChange={e => setFormData({ ...formData, noCoff: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono"
+                        placeholder="e.g. COFF-2026-081"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Final Status Report</label>
+                    <input
+                      type="text"
+                      value={formData.finalStatusReport}
+                      onChange={e => setFormData({ ...formData, finalStatusReport: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-semibold"
+                      placeholder="e.g. Certificate of Analysis Released / In Progress"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: LOG AKTIVITAS (TIMELINE DENGAN HAPUS PER BARIS) */}
+              {activeUpdateTab === 'tab4' && (
+                <div className="space-y-4">
+                  {/* Form Tambah Catatan Baru */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                    <span className="font-bold text-slate-800 block text-xs">Tambah Catatan Aktivitas Baru</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">Tanggal Log</label>
+                        <input
+                          type="date"
+                          value={newLogDate}
+                          onChange={e => setNewLogDate(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">PIC (Otomatis)</label>
+                        <input
+                          type="text"
+                          disabled
+                          readOnly
+                          value={currentUser}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-100 font-bold text-slate-600 cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Deskripsi Aktivitas</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Sampel telah tiba di lab dan siap dilakukan preparasi..."
+                        value={newLogActivity}
+                        onChange={e => setNewLogActivity(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleAddLog}
+                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah ke Log</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Daftar Timeline Riwayat dengan Tombol Hapus per Baris */}
+                  <div>
+                    <span className="font-bold text-slate-700 block mb-2">Riwayat Timeline Aktivitas</span>
+                    {parsedLogs.length === 0 ? (
+                      <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        Belum ada riwayat aktivitas yang tercatat.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {parsedLogs.map((logEntry, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3 bg-white border border-slate-200 rounded-xl flex items-start justify-between gap-3 shadow-xs hover:border-slate-300 transition-colors"
+                          >
+                            <div className="flex items-start gap-2">
+                              <div className="w-2 h-2 rounded-full bg-sky-500 mt-1.5 shrink-0"></div>
+                              <span className="text-slate-700 font-medium leading-relaxed">{logEntry}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLog(idx)}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded shrink-0 transition-colors"
+                              title="Hapus baris log ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 5: LAMPIRAN FILE (KOLOM S - LINK FILE) */}
+              {activeUpdateTab === 'tab5' && (
+                <div className="space-y-4">
+                  <div className="p-6 border-2 border-dashed border-slate-300 rounded-2xl text-center bg-slate-50/50 space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 mx-auto flex items-center justify-center">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-900 block text-sm">Upload Lampiran / Dokumen Uji</span>
+                      <p className="text-slate-500 text-[11px] mt-0.5">
+                        Mendukung PDF, Word, Excel, Gambar hasil lab (Disimpan ke S3 &amp; Versi Paksa Anti-Gagal).
+                      </p>
+                    </div>
+
+                    <div className="pt-2">
+                      <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md transition-colors">
+                        <Upload className="w-4 h-4" />
+                        <span>{modalUploading ? 'Sedang Mengunggah...' : 'Pilih File Dokumen'}</span>
+                        <input
+                          type="file"
+                          onChange={handleModalFileUpload}
+                          disabled={modalUploading}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {formData.fileUrl ? (
+                    <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <FileText className="w-5 h-5 text-sky-600 shrink-0" />
+                        <div className="truncate">
+                          <span className="font-bold text-slate-900 block text-xs truncate">
+                            Dokumen Terlampir (Kolom S - LINK FILE)
+                          </span>
+                          <span className="text-[11px] text-sky-700 font-mono truncate block">
+                            {formData.fileUrl.startsWith('data:')
+                              ? 'Base64 Data Document (Versi Paksa)'
+                              : formData.fileUrl}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <a
+                          href={formData.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Preview</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, fileUrl: '' })}
+                          className="px-2.5 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold text-xs rounded-xl flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-slate-100 rounded-xl text-center text-slate-500 text-xs">
+                      Belum ada file yang terlampir pada material ini.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-200 mt-4">
+                <span className="text-[11px] text-slate-400">
+                  Perubahan akan disimpan langsung ke database PostgreSQL
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsUpdateModalOpen(false)}
+                    className="px-4 py-2 border border-slate-300 rounded-xl font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveUpdate()}
+                    className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md"
+                  >
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL 3: HALAMAN ADMIN KONEKSI & DATABASE (PASSWORD: intertekqc)
+         ======================================================== */}
+      {isAdminModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full border border-slate-100 my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-sky-400" />
+                <h3 className="font-bold text-base">Koneksi &amp; Status Database</h3>
               </div>
               <button
-                onClick={() => setIsStockModalOpen(false)}
+                onClick={() => {
+                  setIsAdminModalOpen(false);
+                  setIsAdminUnlocked(false);
+                  setAdminPasswordInput('');
+                }}
                 className="text-slate-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveStock} className="p-6 space-y-4 text-xs">
-              {errorMsg && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{errorMsg}</span>
+            <div className="p-6 text-xs">
+              {!isAdminUnlocked ? (
+                <form onSubmit={handleUnlockAdmin} className="space-y-4">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-amber-800">
+                    <Lock className="w-4 h-4 shrink-0 text-amber-600" />
+                    <span>Halaman ini dilindungi kata sandi administrator. Masukkan kata sandi untuk melanjutkan.</span>
+                  </div>
+
+                  {adminError && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 font-medium">
+                      {adminError}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Password Administrator</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Masukkan password admin..."
+                      value={adminPasswordInput}
+                      onChange={e => setAdminPasswordInput(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-sm"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAdminModalOpen(false)}
+                      className="px-4 py-2 border border-slate-300 rounded-xl font-semibold"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={adminLoading}
+                      className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md"
+                    >
+                      {adminLoading ? 'Memeriksa...' : 'Buka Kunci'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Status Database: TERKONEKSI OTOMATIS</span>
+                    </div>
+                    <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
+                      Live
+                    </span>
+                  </div>
+
+                  {adminData && (
+                    <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-[11px]">
+                      <div>
+                        <span className="text-slate-500 block">Database Server:</span>
+                        <span className="font-bold text-slate-800">{adminData.database}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Host &amp; Port:</span>
+                        <span className="font-bold text-slate-800">{adminData.host}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Database Name:</span>
+                        <span className="font-bold text-slate-800">{adminData.dbName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">RustFS S3 Endpoint:</span>
+                        <span className="font-bold text-slate-800">{adminData.s3Endpoint}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Total Material Terdaftar:</span>
+                        <span className="font-bold text-sky-700 text-sm">{adminData.totalMaterials} Data</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="space-y-2 pt-2">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            'postgresql://inve_user:InveLab2026SecurePass@149.41.198.83:5432/inve_db'
+                          );
+                          setCopiedConfig(true);
+                          setTimeout(() => setCopiedConfig(false), 2000);
+                        }}
+                        className="flex-1 py-2 px-3 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-1.5"
+                      >
+                        {copiedConfig ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Tersalin!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Salin URL Database</span>
+                          </>
+                        )}
+                      </button>
+
+                      <a
+                        href="http://149.41.198.83:8080"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Database className="w-3.5 h-3.5" />
+                        <span>Adminer</span>
+                        <ExternalLink className="w-3 h-3 text-indigo-200" />
+                      </a>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleResetDatabase}
+                      disabled={adminLoading}
+                      className="w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${adminLoading ? 'animate-spin' : ''}`} />
+                      <span>Reset Data ke Sampel Standar LabLogix</span>
+                    </button>
+                  </div>
                 </div>
               )}
-
-              {/* Current balance card */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
-                <div>
-                  <span className="text-slate-500 block">Available In Stock</span>
-                  <span className="text-lg font-bold text-slate-900">
-                    {selectedStockItem.current_stock} {selectedStockItem.unit}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-slate-500 block">Item Code</span>
-                  <span className="font-mono text-slate-700 font-semibold">{selectedStockItem.code}</span>
-                </div>
-              </div>
-
-              {/* Action type radio pills */}
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1.5">Action Type</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setStockForm({ ...stockForm, transaction_type: 'OUT' })}
-                    className={`py-2 text-center rounded-lg font-bold transition-all ${
-                      stockForm.transaction_type === 'OUT'
-                        ? 'bg-amber-500 text-slate-950 shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    - Stock OUT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStockForm({ ...stockForm, transaction_type: 'IN' })}
-                    className={`py-2 text-center rounded-lg font-bold transition-all ${
-                      stockForm.transaction_type === 'IN'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    + Stock IN
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStockForm({ ...stockForm, transaction_type: 'ADJUSTMENT' })}
-                    className={`py-2 text-center rounded-lg font-bold transition-all ${
-                      stockForm.transaction_type === 'ADJUSTMENT'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    Adjust
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  {stockForm.transaction_type === 'ADJUSTMENT' ? 'New Counted Stock *' : 'Quantity *'} ({selectedStockItem.unit})
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  min="0.01"
-                  required
-                  value={stockForm.quantity}
-                  onChange={e => setStockForm({ ...stockForm, quantity: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Purpose / Experiment Name / Reference *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={stockForm.purpose}
-                  onChange={e => setStockForm({ ...stockForm, purpose: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="e.g. Exp #84: Water Quality Titration"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Performed By (Analyst / Staff Name) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={stockForm.performed_by}
-                  onChange={e => setStockForm({ ...stockForm, performed_by: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="e.g. Dr. Jane Doe"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Notes (Optional)</label>
-                <input
-                  type="text"
-                  value={stockForm.notes}
-                  onChange={e => setStockForm({ ...stockForm, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="e.g. Prepared 250mL 0.1M solution"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsStockModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg shadow-sm"
-                >
-                  Confirm Movement
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -1319,12 +2008,23 @@ export default function InventoryDashboard() {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-4 text-xs text-slate-500 text-center">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>&copy; {new Date().getFullYear()} inve Laboratory Inventory System &bull; vector-intertek.web.id</span>
-          <div className="flex items-center gap-4">
-            <span>PostgreSQL: 149.41.198.83:5432</span>
-            <span>RustFS S3: 149.41.198.83:9000</span>
-            <a href="http://149.41.198.83:8080" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
-              Adminer
+          <span>&copy; {new Date().getFullYear()} LabLogix Material Monitoring &amp; Testing System &bull; Intertek QC</span>
+          <div className="flex items-center gap-4 text-[11px]">
+            <span className="flex items-center gap-1 text-emerald-600 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              PostgreSQL Dokploy
+            </span>
+            <span className="flex items-center gap-1 text-sky-600 font-medium">
+              <Cloud className="w-3.5 h-3.5" />
+              RustFS S3 (Versi Paksa Ready)
+            </span>
+            <a
+              href="http://149.41.198.83:8080"
+              target="_blank"
+              rel="noreferrer"
+              className="text-indigo-600 hover:underline font-semibold"
+            >
+              Adminer DB
             </a>
           </div>
         </div>

@@ -1,55 +1,69 @@
 import { z } from 'zod';
 
-export const CategoryEnum = z.enum([
-  'Chemical',
-  'Biological',
-  'Glassware',
-  'Consumable',
-  'Equipment',
-  'Other'
+export const MaterialStatusEnum = z.enum([
+  'On The Way',
+  'Analysis',
+  'Canceled',
+  'Done'
 ]);
 
-export const HazardEnum = z.enum([
-  'none',
-  'flammable',
-  'corrosive',
-  'toxic',
-  'oxidizing',
-  'biohazard'
-]);
+export const standardLocations = [
+  'FPU',
+  'ORF',
+  'PSTB',
+  'Somber / Altus',
+  'Intertek Balikpapan',
+  'Intertek Jakarta',
+  'Handayani'
+] as const;
 
-export const TransactionTypeEnum = z.enum(['IN', 'OUT', 'ADJUSTMENT']);
+export const sixCheckpoints = [
+  'FPU',
+  'ORF',
+  'PSTB',
+  'Somber / Altus',
+  'Intertek Balikpapan',
+  'Intertek Jakarta'
+] as const;
 
-export const itemSchema = z.object({
-  code: z.string().min(2, 'Item code must be at least 2 characters').max(50),
-  name: z.string().min(2, 'Name must be at least 2 characters').max(255),
-  category: CategoryEnum,
-  cas_number: z.string().optional().nullable(),
-  unit: z.string().min(1, 'Unit is required').max(50),
-  current_stock: z.coerce.number().min(0, 'Stock cannot be negative'),
-  minimum_stock: z.coerce.number().min(0, 'Minimum stock cannot be negative'),
-  location: z.string().min(2, 'Location is required').max(100),
-  batch_number: z.string().optional().nullable(),
-  expiry_date: z.string().optional().nullable(),
-  hazard_classification: HazardEnum.default('none'),
-  document_url: z.string().optional().nullable(),
-  document_name: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
+export const materialSchema = z.object({
+  no: z.string().optional().nullable(),
+  status: MaterialStatusEnum.default('On The Way'),
+  deliveryDate: z.string().optional().nullable(),
+  pointOfOrigin: z.string().min(1, 'Point of origin is required'),
+  pointOfDelivery: z.string().min(1, 'Point of delivery is required'),
+  shippingRequirements: z.string().optional().nullable(),
+  shipmentBy: z.string().optional().nullable(),
+  itemDescription: z.string().min(1, 'Item description is required'),
+  pic: z.string().min(1, 'PIC is required'),
+  technicalProposalStatus: z.string().optional().nullable(),
+  costProposalStatus: z.string().optional().nullable(),
+  statusCoff: z.string().optional().nullable(),
+  noCoff: z.string().optional().nullable(),
+  analysisRequested: z.string().optional().nullable(),
+  finalStatusReport: z.string().optional().nullable(),
+  remarkRaw: z.string().optional().nullable(),
+  remarkStructured: z.string().optional().nullable(),
+  remarkParseNote: z.string().optional().nullable(),
+  fileUrl: z.string().optional().nullable(),
 });
 
-export const itemUpdateSchema = itemSchema.partial().extend({
+export const materialUpdateSchema = materialSchema.partial().extend({
   id: z.coerce.number().positive(),
 });
 
+export type MaterialInput = z.infer<typeof materialSchema>;
+export type MaterialUpdateInput = z.infer<typeof materialUpdateSchema>;
+export type MaterialStatus = z.infer<typeof MaterialStatusEnum>;
+
+// Compatibility aliases
+export const itemSchema = materialSchema;
+export const itemUpdateSchema = materialUpdateSchema;
 export const stockTransactionSchema = z.object({
-  item_id: z.coerce.number().positive('Valid item ID is required'),
-  transaction_type: TransactionTypeEnum,
-  quantity: z.coerce.number().positive('Quantity must be greater than zero'),
-  purpose: z.string().max(255).optional().nullable(),
-  performed_by: z.string().min(2, 'Staff/Analyst name is required').max(100),
+  item_id: z.coerce.number().optional().nullable(),
+  transaction_type: z.string().optional().nullable(),
+  quantity: z.coerce.number().optional().nullable(),
+  purpose: z.string().optional().nullable(),
+  performed_by: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
-
-export type ItemInput = z.infer<typeof itemSchema>;
-export type ItemUpdateInput = z.infer<typeof itemUpdateSchema>;
-export type StockTransactionInput = z.infer<typeof stockTransactionSchema>;

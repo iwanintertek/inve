@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'inve - Laboratory Inventory System',
-  description: 'Fullstack Next.js Laboratory Inventory Management System with PostgreSQL, RustFS S3, and Adminer',
+  title: 'LabLogix - Material Monitoring & Testing System',
+  description: 'Intertek QC Material Monitoring & Testing System with PostgreSQL, RustFS S3, and Adminer',
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
+      <body className="antialiased bg-slate-100 text-slate-900 min-h-screen">
         {children}
       </body>
     </html>
